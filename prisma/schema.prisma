@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Пользователь MINDLY: вход по почте или через провайдера (google / github)
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String?
+  passwordHash String? // null, если аккаунт создан через OAuth-провайдера
+  provider     String       @default("email") // email | google | github
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  folders      Folder[]
+  notes        Note[]
+  attachments  Attachment[]
+}
+
+// Папка блокнота: обычная вложенность — папка может лежать внутри папки,
+// заметка может лежать в любой папке на любом уровне
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  parentId  String?
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderTree")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes     Note[]
+  createdAt DateTime @default(now())
+
+  @@index([userId, parentId])
+}
+
+// Заметка: markdown-текст, флажки избранного и корзины
+model Note {
+  id          String       @id @default(cuid())
+  title       String
+  content     String       @default("")
+  starred     Boolean      @default(false)
+  trashed     Boolean      @default(false)
+  folderId    String?
+  folder      Folder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([userId, trashed])
+}
+
+// Вложение: текстовый файл, код или картинка в dataURL — всегда под рукой
+model Attachment {
+  id        String   @id @default(cuid())
+  name      String
+  mime      String   @default("text/plain")
+  size      Int      @default(0)
+  data      String   @default("") // текст содержимого или data:URL для картинок
+  noteId    String?
+  note      Note?    @relation(fields: [noteId], references: [id], onDelete: SetNull)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
